@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trading-view-big-data"
+version = "0.1.0"
+description = "Scalable trading data platform - OHLCV ingestion, processing, and visualization"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "Trading View Big Data Team"}
+]
+dependencies = [
+    "httpx>=0.25.0",
+    "pandas>=2.0.0",
+    "pyarrow>=14.0.0",
+    "tqdm>=4.66.0",
+    "pydantic>=2.0.0",
+    "click>=8.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "ruff>=0.1.0",
+]
+
+[project.scripts]
+ingest-batch = "apps.ingest_batch.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["apps*", "packages*", "pipelines*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

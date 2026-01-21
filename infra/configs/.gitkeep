@@ -1,0 +1,7 @@
+# Placeholder for infrastructure configuration files
+# Future files:
+# - kafka-topics.yml
+# - spark-defaults.conf
+# - prometheus.yml
+# - grafana-dashboards/
+
