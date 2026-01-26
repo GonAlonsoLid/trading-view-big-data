@@ -113,7 +113,7 @@ class OHLCVBackfillPipeline:
             self._writer = ParquetPartitionedWriter(
                 base_path=self.output_path,
                 source=self.source,
-                symbol=self.symbol,
+                symbol="BTCUSDT",  # Always save as BTCUSDT regardless of fetch ticker
                 timeframe=self.timeframe,
                 max_rows_per_file=self.max_rows_per_file,
                 overwrite=self.overwrite,
@@ -245,8 +245,8 @@ class OHLCVBackfillPipeline:
                 logger.error("No valid records after validation")
                 return stats
 
-            # Ensure column order
-            valid_df = valid_df[OHLCV_COLUMN_ORDER]
+            # Ensure column order and drop symbol (always BTCUSDT, stored in path)
+            valid_df = valid_df[OHLCV_COLUMN_ORDER].drop(columns=["symbol"])
 
             # Write to Parquet
             logger.info(f"Writing {len(valid_df)} valid records to Parquet...")
