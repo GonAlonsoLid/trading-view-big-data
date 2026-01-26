@@ -6,7 +6,7 @@ Entry point for batch data ingestion operations.
 Usage:
     python -m apps.ingest_batch backfill --timeframe 1h --out data_lake
     python -m apps.ingest_batch backfill --timeframe 1d --start 2023-01-01 --end 2023-12-31
-    python -m apps.ingest_batch backfill --timeframe all --overwrite
+    python -m apps.ingest_batch backfill --timeframe all
 """
 
 import sys
@@ -78,18 +78,6 @@ def cli(log_level: str):
     help="Output path for data lake (default: data_lake)",
 )
 @click.option(
-    "--max-rows-per-file",
-    type=int,
-    default=200000,
-    help="Maximum rows per Parquet file (default: 200000)",
-)
-@click.option(
-    "--overwrite",
-    is_flag=True,
-    default=False,
-    help="Overwrite existing files (default: False)",
-)
-@click.option(
     "--no-progress",
     is_flag=True,
     default=False,
@@ -101,15 +89,13 @@ def backfill(
     start: str,
     end: str,
     out: str,
-    max_rows_per_file: int,
-    overwrite: bool,
     no_progress: bool,
 ):
     """
     Backfill historical OHLCV data from Binance.
     
     Downloads candlestick data for the specified symbol and timeframe,
-    validates, and writes to partitioned Parquet files.
+    validates, and writes to CSV files.
     
     Examples:
     
@@ -142,8 +128,6 @@ def backfill(
     click.echo(f"Timeframe:        {timeframe}")
     click.echo(f"Date range:       {start} to {end}")
     click.echo(f"Output path:      {out}")
-    click.echo(f"Max rows/file:    {max_rows_per_file}")
-    click.echo(f"Overwrite:        {overwrite}")
     click.echo(f"{'='*60}")
 
     # Determine timeframes to process
@@ -164,8 +148,6 @@ def backfill(
                 start_date=start_date,
                 end_date=end_date,
                 output_path=out,
-                max_rows_per_file=max_rows_per_file,
-                overwrite=overwrite,
                 show_progress=not no_progress,
             )
             all_stats.append(stats)

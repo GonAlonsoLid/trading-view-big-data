@@ -2,16 +2,21 @@
 OHLCV Backfill Pipeline.
 
 Orchestrates the batch ingestion of historical OHLCV data from exchanges
-to local Parquet storage.
+to local CSV storage with partitioning.
 
 Features:
 - Fetches data from Binance API with automatic pagination
 - Converts to OHLCV contract format with validation
-- Writes to partitioned Parquet files
+- Writes to partitioned CSV files (by year/month)
 - Progress tracking and logging
+
+Output structure:
+    data_lake/raw/ohlcv/source=<source>/symbol=BTCUSDT/timeframe=<tf>/
+        year=YYYY/month=MM/data.csv
 """
 
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
 import pandas as pd
@@ -24,7 +29,6 @@ from packages.contracts.ohlcv import (
     validate_ohlcv_batch,
     OHLCV_COLUMN_ORDER,
 )
-from packages.storage.parquet_writer import ParquetPartitionedWriter
 from packages.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -55,14 +59,13 @@ class OHLCVBackfillPipeline:
     1. Data fetching from exchange API
     2. Transformation to OHLCV contract format
     3. Validation
-    4. Persistence to partitioned Parquet
+    4. Persistence to partitioned CSV (by year/month)
     
     Usage:
         pipeline = OHLCVBackfillPipeline(
             symbol="BTCUSDT",
             timeframe="1h",
-            output_path="data_lake",
-            max_rows_per_file=200000
+            output_path="data_lake"
         )
         stats = pipeline.run(
             start_date=datetime(2022, 1, 1),
@@ -76,8 +79,6 @@ class OHLCVBackfillPipeline:
         timeframe: str = "1h",
         output_path: str = "data_lake",
         source: str = "binance",
-        max_rows_per_file: int = 200000,
-        overwrite: bool = False,
     ):
         """
         Initialize the backfill pipeline.
@@ -87,19 +88,14 @@ class OHLCVBackfillPipeline:
             timeframe: Candle timeframe (1h, 1d, etc.)
             output_path: Base path for output data
             source: Data source identifier
-            max_rows_per_file: Maximum rows per Parquet file
-            overwrite: If True, overwrite existing files
         """
         self.symbol = symbol
         self.timeframe = timeframe
-        self.output_path = output_path
+        self.output_path = Path(output_path)
         self.source = source
-        self.max_rows_per_file = max_rows_per_file
-        self.overwrite = overwrite
 
         # Initialize components
         self._client: Optional[BinanceKlinesClient] = None
-        self._writer: Optional[ParquetPartitionedWriter] = None
 
     def _get_client(self) -> BinanceKlinesClient:
         """Get or create the Binance client."""
@@ -107,18 +103,62 @@ class OHLCVBackfillPipeline:
             self._client = BinanceKlinesClient()
         return self._client
 
-    def _get_writer(self) -> ParquetPartitionedWriter:
-        """Get or create the Parquet writer."""
-        if self._writer is None:
-            self._writer = ParquetPartitionedWriter(
-                base_path=self.output_path,
-                source=self.source,
-                symbol="BTCUSDT",  # Always save as BTCUSDT regardless of fetch ticker
-                timeframe=self.timeframe,
-                max_rows_per_file=self.max_rows_per_file,
-                overwrite=self.overwrite,
-            )
-        return self._writer
+    def _get_partition_path(self, year: int, month: int) -> Path:
+        """Get the path for a specific year/month partition."""
+        return (
+            self.output_path
+            / "raw"
+            / "ohlcv"
+            / f"source={self.source}"
+            / "symbol=BTCUSDT"
+            / f"timeframe={self.timeframe}"
+            / f"year={year}"
+            / f"month={month:02d}"
+        )
+
+    def _write_partitioned(self, df: pd.DataFrame) -> list[str]:
+        """
+        Write DataFrame to partitioned CSV files by year/month.
+        
+        Args:
+            df: DataFrame with OHLCV data
+            
+        Returns:
+            List of written file paths
+        """
+        if df.empty:
+            return []
+
+        # Ensure event_time is datetime with UTC
+        if not pd.api.types.is_datetime64_any_dtype(df["event_time"]):
+            df["event_time"] = pd.to_datetime(df["event_time"], utc=True)
+
+        # Sort by event_time
+        df = df.sort_values("event_time").reset_index(drop=True)
+
+        # Extract year and month for partitioning
+        df["_year"] = df["event_time"].dt.year
+        df["_month"] = df["event_time"].dt.month
+
+        written_files = []
+
+        # Group by year/month and write each partition
+        for (year, month), group_df in df.groupby(["_year", "_month"]):
+            # Remove partition columns before writing
+            partition_df = group_df.drop(columns=["_year", "_month"])
+
+            # Get partition path and create directories
+            partition_path = self._get_partition_path(int(year), int(month))
+            partition_path.mkdir(parents=True, exist_ok=True)
+
+            # Write CSV
+            file_path = partition_path / "data.csv"
+            partition_df.to_csv(file_path, index=False)
+
+            written_files.append(str(file_path))
+            logger.info(f"Partition {year}-{month:02d}: {len(partition_df)} rows -> {file_path}")
+
+        return written_files
 
     def _estimate_total_candles(
         self, start_date: datetime, end_date: datetime
@@ -160,7 +200,6 @@ class OHLCVBackfillPipeline:
         end_date = end_date.replace(hour=23, minute=59, second=59, microsecond=999999)
 
         client = self._get_client()
-        writer = self._get_writer()
         ingestion_time = datetime.now(timezone.utc)
 
         # Statistics
@@ -245,12 +284,12 @@ class OHLCVBackfillPipeline:
                 logger.error("No valid records after validation")
                 return stats
 
-            # Ensure column order and drop symbol (always BTCUSDT, stored in path)
+            # Ensure column order and drop symbol (always BTCUSDT, in path)
             valid_df = valid_df[OHLCV_COLUMN_ORDER].drop(columns=["symbol"])
 
-            # Write to Parquet
-            logger.info(f"Writing {len(valid_df)} valid records to Parquet...")
-            written_files = writer.write(valid_df)
+            # Write to partitioned CSV files
+            logger.info(f"Writing {len(valid_df)} valid records to partitioned CSV...")
+            written_files = self._write_partitioned(valid_df)
             stats["files_written"] = written_files
 
             end_time = datetime.now(timezone.utc)
@@ -274,8 +313,6 @@ def run_backfill(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     output_path: str = "data_lake",
-    max_rows_per_file: int = 200000,
-    overwrite: bool = False,
     show_progress: bool = True,
 ) -> dict:
     """
@@ -287,8 +324,6 @@ def run_backfill(
         start_date: Start date (default: 2022-01-01)
         end_date: End date (default: 2025-12-31)
         output_path: Output path for data
-        max_rows_per_file: Max rows per file
-        overwrite: Overwrite existing files
         show_progress: Show progress bar
         
     Returns:
@@ -303,8 +338,6 @@ def run_backfill(
         symbol=symbol,
         timeframe=timeframe,
         output_path=output_path,
-        max_rows_per_file=max_rows_per_file,
-        overwrite=overwrite,
     )
 
     return pipeline.run(
