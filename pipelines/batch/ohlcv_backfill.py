@@ -11,8 +11,7 @@ Features:
 - Progress tracking and logging
 
 Output structure:
-    data_lake/raw/ohlcv/source=<source>/symbol=BTCUSDT/timeframe=<tf>/
-        year=YYYY/month=MM/data.csv
+    data_lake/raw/ohlcv/timeframe=<tf>/year=YYYY/month=MM/data.csv
 """
 
 from datetime import datetime, timezone
@@ -109,8 +108,6 @@ class OHLCVBackfillPipeline:
             self.output_path
             / "raw"
             / "ohlcv"
-            / f"source={self.source}"
-            / "symbol=BTCUSDT"
             / f"timeframe={self.timeframe}"
             / f"year={year}"
             / f"month={month:02d}"
