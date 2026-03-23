@@ -1,0 +1,58 @@
+# -*- coding: utf-8 -*-
+
+import json
+
+from kafka import KafkaConsumer
+from kafka.structs import TopicPartition
+
+
+def _safe_json_decode(v):
+    try:
+        return json.loads(v.decode("utf-8")) if v else None
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None
+
+
+BOOTSTRAP_SERVERS = "192.168.80.34:9092"
+TOPIC = "gittba_BTC"
+GROUP_ID = "gittba03"
+
+
+def main() -> None:
+    consumer = KafkaConsumer(
+        bootstrap_servers=[BOOTSTRAP_SERVERS],
+        group_id=GROUP_ID,
+        auto_offset_reset="latest",
+        enable_auto_commit=True,
+        key_deserializer=lambda v: v.decode("utf-8"),
+        value_deserializer=lambda v: _safe_json_decode(v),
+    )
+
+    consumer.assign([TopicPartition(TOPIC, 0)])
+
+    print(f"Escuchando topic {TOPIC}...\n")
+
+    try:
+        while True:
+            records = consumer.poll(timeout_ms=1000)
+            for topic_data, consumer_records in records.items():
+                for record in consumer_records:
+                    value = record.value
+                    if not value:
+                        continue
+                    print(
+                        f"offset={record.offset} | "
+                        f"key={record.key} | "
+                        f"timestamp_ms={record.timestamp} | "
+                        f"@timestamp={value.get('@timestamp')} | "
+                        f"close={value.get('close')} | "
+                        f"volume={value.get('volume')}"
+                    )
+    except KeyboardInterrupt:
+        print("\nDetenido por el usuario.")
+    finally:
+        consumer.close()
+
+
+if __name__ == "__main__":
+    main()
