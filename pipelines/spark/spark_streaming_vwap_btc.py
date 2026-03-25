@@ -70,6 +70,9 @@ def main() -> None:
         )
     )
 
+    # Watermark para que Spark cierre ventanas y libere estado
+    parsed_df = parsed_df.withWatermark("kafka_ts", "10 seconds")
+
     # Calcular precio * volumen para el VWAP
     with_pv = parsed_df.withColumn("price_volume", col("close") * col("volume"))
 
@@ -108,7 +111,7 @@ def main() -> None:
         .option("kafka.bootstrap.servers", BOOTSTRAP_SERVERS)
         .option("topic", OUTPUT_TOPIC)
         .option("checkpointLocation", "/tmp/vwap_btc_checkpoint")
-        .outputMode("update")
+        .outputMode("append")
         .start()
     )
 
