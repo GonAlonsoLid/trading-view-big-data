@@ -65,3 +65,10 @@ tmp/
 temp/
 *.tmp
 
+# Certificates and VPN credentials - DO NOT VERSION
+cert/
+*.key
+*.crt
+*.csr
+*.ovpn
+

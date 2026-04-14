@@ -29,6 +29,10 @@ def main() -> None:
     spark = (
         SparkSession.builder
         .appName("VWAP_BTC_Streaming")
+        .config(
+            "spark.jars.packages",
+            "org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.2",
+        )
         .getOrCreate()
     )
     spark.sparkContext.setLogLevel("WARN")
