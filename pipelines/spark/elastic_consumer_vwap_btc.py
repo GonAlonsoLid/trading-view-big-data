@@ -151,11 +151,12 @@ def main() -> None:
                     if not value:
                         continue
 
+                    window_start = value.get("window_start", "")
                     window_end = value.get("window_end", "")
 
                     doc = {
-                        "window_start": value.get("window_start"),
-                        "window_end": window_end,
+                        "window_start": _to_es_timestamp(window_start),
+                        "window_end": _to_es_timestamp(window_end),
                         "symbol": value.get("symbol"),
                         "vwap": value.get("vwap"),
                         "@timestamp": _to_es_timestamp(window_end),

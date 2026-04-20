@@ -65,6 +65,10 @@ tmp/
 temp/
 *.tmp
 
+# Office lock files
+~$*
+.~lock.*#
+
 # Certificates and VPN credentials - DO NOT VERSION
 cert/
 *.key

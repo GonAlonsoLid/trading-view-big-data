@@ -36,6 +36,7 @@ def main() -> None:
         .getOrCreate()
     )
     spark.sparkContext.setLogLevel("WARN")
+    spark.conf.set("spark.sql.session.timeZone", "UTC")
 
     # Schema del JSON que llega del producer
     value_schema = StructType([
